@@ -140,7 +140,7 @@ namespace html
 
                     if ('/'==node->text[0]) {
                         stack<struct Node*> temp;
-                        while (!buf.empty() && buf.top()->tag!=node->tag){
+                        while (!buf.empty() && (buf.top()->tag!=node->tag || buf.top()->completed)){
                             temp.push(buf.top());
                             buf.pop();
                         }
@@ -210,7 +210,10 @@ namespace html
 void print(html::Node* tree, int backspace=0) {
     for (int i=0;i<backspace;i++) std::cout<<'\t';
     // std::cout<<tree->tag<<'\t'<<tree->text<<std::endl;
-    std::cout<<tree->tag<<std::endl;
+    if (tree->tag!="Text")
+        std::cout<<tree->tag<<std::endl;
+    else
+        std::cout<<tree->tag<<"\t"<<tree->text<<std::endl;
     for (int i=0;i<tree->children.size();i++) {
         print(tree->children[i], backspace+1);
     }
