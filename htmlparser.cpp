@@ -279,7 +279,7 @@ namespace html
                 } else if (tag.length()>=2 && (tag[tag.length()-1]=='s'&&tag[tag.length()-2]=='S' || tag[tag.length()-1]=='d'&&tag[tag.length()-2]=='D')){
                     segments.emplace_back(string());
                 }
-                // skip tag first
+                // skip tagname item at first
                 for (int i=1;i<segments.size();i+=3){
                     if (i+2<segments.size()&&segments[i]!="=" && segments[i+1]=="="&&segments[i+2]!="="){
                         root->attr.insert(make_pair(segments[i],segments[i+2]));       
