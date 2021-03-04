@@ -4,10 +4,12 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <queue>
 #include <map>
 #include <unordered_map>
 #include <stack>
 #include <sstream>
+#include <utility>
 
 namespace html
 {
@@ -16,8 +18,10 @@ namespace html
     using std::string;
     using std::unordered_map;
     using std::vector;
+    using std::queue;
     using std::stringstream;
     using std::cout;
+    using std::make_pair;
 
     enum Type {
         PLAINTEXT,
@@ -33,6 +37,7 @@ namespace html
         string text;
         vector<Node*> children;
         bool completed;
+        unordered_map<string, string> attr;
     };
 
     string parse(const string& page) {
@@ -175,6 +180,9 @@ namespace html
                         // New node
                         buf.push(node);
                     }
+                } else {
+                    // Error
+                    return NULL;
                 }
             } else {
                 struct Node* node = new Node();
@@ -205,15 +213,96 @@ namespace html
 
         return tree;
     }
+
+    void parse_attr(struct Node* root, const string& tags) {
+        queue<struct Node*> nodes;
+        if (root) {
+            nodes.push(root);
+        }
+        while (!nodes.empty()) {
+            root = nodes.front();
+            nodes.pop();
+            if (!root->children.empty()) {
+                for(auto& n : root->children) {
+                    nodes.push(n);
+                }
+            }
+            if (!root->completed){
+                std::cout<<"##################"<<std::endl;
+            }
+            if (root->tag!="Text") {
+                int start = root->s;
+                int end = tags.find('t', start);
+                string tag = tags.substr(start+1, end-start-1);
+                string content = root->text.substr(1, end-start-1);
+                bool inquote = false;
+                vector<string> segments;
+                string seg;
+                for (int i=0; i<content.length(); i++){
+                    if (tag[i]=='S' || tag[i]=='D'){
+                        inquote=true;
+                    } else if(tag[i]=='s' || tag[i]=='d'){
+                        inquote=false;
+                    } else {
+                        if (inquote) {
+                            if ('\\'==content[i]) {
+                                seg.append(1,content[++i]);
+                            } else {
+                                seg.append(1,content[i]);
+                            }
+                        } else {
+                            if ('\\'==content[i]) {
+                                seg.append(1,content[++i]);
+                            } else if (isspace(content[i])){
+                                if (!seg.empty()) {
+                                    segments.push_back(seg);
+                                    seg.clear();
+                                } else if (i>=2 && (tag[i-1]=='s'&&tag[i-2]=='S' || tag[i-1]=='d'&&tag[i-2]=='D')){
+                                    segments.emplace_back(string());
+                                }
+                            } else if ('='==content[i]){
+                                if (!seg.empty()){
+                                    segments.push_back(seg);
+                                    seg.clear();
+                                } else if (i>=2 && (tag[i-1]=='s'&&tag[i-2]=='S' || tag[i-1]=='d'&&tag[i-2]=='D')){
+                                    segments.emplace_back(string());
+                                }
+                                segments.emplace_back(string(1,'='));                 
+                            } else {
+                                seg.append(1,content[i]);
+                            }
+                        }
+                    }
+                }
+                if (!seg.empty()){
+                    segments.push_back(seg);
+                } else if (tag.length()>=2 && (tag[tag.length()-1]=='s'&&tag[tag.length()-2]=='S' || tag[tag.length()-1]=='d'&&tag[tag.length()-2]=='D')){
+                    segments.emplace_back(string());
+                }
+                // skip tag first
+                for (int i=1;i<segments.size();i+=3){
+                    if (i+2<segments.size()&&segments[i]!="=" && segments[i+1]=="="&&segments[i+2]!="="){
+                        root->attr.insert(make_pair(segments[i],segments[i+2]));       
+                    }
+                }
+            }
+        }
+    }
 }
 
 void print(html::Node* tree, int backspace=0) {
     for (int i=0;i<backspace;i++) std::cout<<'\t';
     // std::cout<<tree->tag<<'\t'<<tree->text<<std::endl;
-    if (tree->tag!="Text")
-        std::cout<<tree->tag<<std::endl;
-    else
+    if (tree->tag!="Text"){
+        std::cout<<tree->tag<<"\t";
+        
+        for (auto& p : tree->attr){
+            std::cout<<"[{"<<p.first<<"}={"<<p.second<<"}]";
+        }
+        std::cout<<std::endl;
+    } else {
         std::cout<<tree->tag<<"\t"<<tree->text<<std::endl;
+    }
     for (int i=0;i<tree->children.size();i++) {
         print(tree->children[i], backspace+1);
     }
@@ -290,6 +379,8 @@ code {\
     std::cout<<lexical<<std::endl;
 
     html::Node* tree = html::extract(page, lexical);
+
+    html::parse_attr(tree, lexical);
     print(tree);
 }
 
