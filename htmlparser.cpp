@@ -510,20 +510,27 @@ void print(html::Node *tree, int backspace = 0)
     for (int i = 0; i < backspace; i++)
         std::cout << '\t';
     // std::cout<<tree->tag<<'\t'<<tree->text<<std::endl;
-    if (tree->tag != "Text")
-    {
-        std::cout << tree->tag << "\t[sn=" << tree->self_sibling_sn << "]\t";
 
-        for (auto &p : tree->attr)
-        {
-            std::cout << "[{" << p.first << "}={" << p.second << "}]";
-        }
-        std::cout << std::endl;
-    }
-    else
+    std::vector<int> path;
+    html::get_path(tree, path);
+    std::cout << "{tag:\"" << tree->tag;
+    std::cout << "\";path:[";
+    for (auto &i : path)
+        std::cout << i << ',';
+    std::cout << "];sn:" << tree->self_sibling_sn;
+
+    std::cout << ";attr:{";
+    for (auto &p : tree->attr)
     {
-        std::cout << tree->tag << "\t" << tree->text << std::endl;
+        std::cout << p.first << ":\"" << p.second << "\";";
     }
+    std::cout << "}";
+
+    if (tree->tag == "Text")
+    {
+        std::cout << ";text:\"" << tree->text << "\"";
+    }
+    std::cout << "}" << std::endl;
     for (int i = 0; i < tree->children.size(); i++)
     {
         print(tree->children[i], backspace + 1);
