@@ -10,6 +10,9 @@
 #include <stack>
 #include <sstream>
 #include <utility>
+#include <fstream>
+#include "mbsconverter.h"
+#include <clocale>
 
 namespace html
 {
@@ -22,6 +25,7 @@ namespace html
     using std::stringstream;
     using std::unordered_map;
     using std::vector;
+    using std::wstring;
 
     enum Type
     {
@@ -35,16 +39,16 @@ namespace html
     struct Node
     {
         int s, e;
-        string tag;
-        string text;
+        wstring tag;
+        wstring text;
         Node *parent;
         vector<Node *> children;
         int self_sibling_sn;
         bool completed;
-        unordered_map<string, string> attr;
+        unordered_map<wstring, wstring> attr;
     };
 
-    string parse_text(const string &page)
+    string parse_text(const wstring &page)
     {
         Type status = PLAINTEXT;
         stack<Type> history;
@@ -58,14 +62,18 @@ namespace html
         types.push_back(status);
         for (int i = 0; i < page.length(); i++)
         {
-            char ch = page[i];
+            if (i == 3058 - 1)
+            {
+                std::cout << "@@@@@@@@@@@@@@@@@" << std::endl;
+            }
+            wchar_t ch = page[i];
             switch (ch)
             {
             case '\\':
                 i++;
                 os << '.' << '.';
                 break;
-            case '\'':
+            case L'\'':
                 if (SINGLEQUOTE == history.top())
                 {
                     history.pop();
@@ -126,6 +134,10 @@ namespace html
                     types.push_back(TAG);
                     os << 't';
                 }
+                else
+                {
+                    os << '.';
+                }
                 break;
             default:
                 os << '.';
@@ -133,13 +145,13 @@ namespace html
             }
         }
         cout << os.str() << std::endl;
-        cout << page << std::endl;
+        cout << page.c_str() << std::endl;
 
         os >> result;
         return result;
     }
 
-    struct Node *extract(const string &page, const string &tags)
+    struct Node *extract(const wstring &page, const string &tags)
     {
         stack<struct Node *> buf;
         struct Node *tree = NULL;
@@ -157,18 +169,18 @@ namespace html
                     node->e = i + 1;
                     node->text = page.substr(node->s + 1, node->e - node->s - 2);
                     int sj = 0;
-                    if ('/' == node->text[0])
+                    if (L'/' == node->text[0])
                     {
                         sj++;
                     }
                     int j = sj;
-                    while (j < node->text.length() && node->text[j] != '/' && node->text[j] != ' ')
+                    while (j < node->text.length() && node->text[j] != L'/' && node->text[j] != L' ')
                     {
                         j++;
                     }
                     node->tag = node->text.substr(sj, j - sj);
 
-                    if ('/' == node->text[0])
+                    if (L'/' == node->text[0])
                     {
                         stack<struct Node *> temp;
                         while (!buf.empty() && (buf.top()->tag != node->tag || buf.top()->completed))
@@ -201,7 +213,7 @@ namespace html
                             // return NULL;
                         }
                     }
-                    else if ('/' == node->text[node->text.length() - 1] || "br" == node->tag)
+                    else if (L'/' == node->text[node->text.length() - 1] || L"br" == node->tag)
                     {
                         node->text = page.substr(node->s, node->e - node->s);
                         node->completed = true;
@@ -235,10 +247,18 @@ namespace html
                     ;
                 node->e = i;
                 node->text = page.substr(node->s, node->e - node->s);
-                node->tag = "Text";
+                if (string::npos != node->text.find(L"一行，包括四个正整数$x，a，y，b$，两个整数之间用单个空格隔开"))
+                {
+                    std::cout << node->s << "\t" << node->e << std::endl;
+                    std::string buf;
+                    wcstombs(buf, page.substr(node->s, node->e - node->s + 1));
+                    std::cout << buf << std::endl;
+                    std::cout << tags.substr(node->s, node->e - node->s + 1) << std::endl;
+                }
+                node->tag = L"Text";
                 if (!buf.empty())
                 {
-                    if (!buf.top()->completed && buf.top()->tag != "br")
+                    if (!buf.top()->completed && buf.top()->tag != L"br")
                         buf.top()->children.push_back(node);
                     else
                         buf.push(node);
@@ -304,15 +324,15 @@ namespace html
                     nodes.push(n);
                 }
             }
-            if (root->tag != "Text")
+            if (root->tag != L"Text")
             {
                 int start = root->s;
                 int end = tags.find('t', start);
                 string tag = tags.substr(start + 1, end - start - 1);
-                string content = root->text.substr(1, end - start - 1);
+                wstring content = root->text.substr(1, end - start - 1);
                 bool inquote = false;
-                vector<string> segments;
-                string seg;
+                vector<wstring> segments;
+                wstring seg;
                 for (int i = 0; i < content.length(); i++)
                 {
                     if (tag[i] == 'S' || tag[i] == 'D')
@@ -327,7 +347,7 @@ namespace html
                     {
                         if (inquote)
                         {
-                            if ('\\' == content[i])
+                            if (L'\\' == content[i])
                             {
                                 seg.append(1, content[++i]);
                             }
@@ -338,7 +358,7 @@ namespace html
                         }
                         else
                         {
-                            if ('\\' == content[i])
+                            if (L'\\' == content[i])
                             {
                                 seg.append(1, content[++i]);
                             }
@@ -351,10 +371,10 @@ namespace html
                                 }
                                 else if (i >= 2 && (tag[i - 1] == 's' && tag[i - 2] == 'S' || tag[i - 1] == 'd' && tag[i - 2] == 'D'))
                                 {
-                                    segments.emplace_back(string());
+                                    segments.emplace_back(wstring());
                                 }
                             }
-                            else if ('=' == content[i])
+                            else if (L'=' == content[i])
                             {
                                 if (!seg.empty())
                                 {
@@ -363,9 +383,9 @@ namespace html
                                 }
                                 else if (i >= 2 && (tag[i - 1] == 's' && tag[i - 2] == 'S' || tag[i - 1] == 'd' && tag[i - 2] == 'D'))
                                 {
-                                    segments.emplace_back(string());
+                                    segments.emplace_back(wstring());
                                 }
-                                segments.emplace_back(string(1, '='));
+                                segments.emplace_back(wstring(1, '='));
                             }
                             else
                             {
@@ -380,12 +400,12 @@ namespace html
                 }
                 else if (tag.length() >= 2 && (tag[tag.length() - 1] == 's' && tag[tag.length() - 2] == 'S' || tag[tag.length() - 1] == 'd' && tag[tag.length() - 2] == 'D'))
                 {
-                    segments.emplace_back(string());
+                    segments.emplace_back(wstring());
                 }
                 // skip tagname item at first
                 for (int i = 1; i < segments.size(); i += 3)
                 {
-                    if (i + 2 < segments.size() && segments[i] != "=" && segments[i + 1] == "=" && segments[i + 2] != "=")
+                    if (i + 2 < segments.size() && segments[i] != L"=" && segments[i + 1] == L"=" && segments[i + 2] != L"=")
                     {
                         root->attr.insert(make_pair(segments[i], segments[i + 2]));
                     }
@@ -409,17 +429,17 @@ namespace html
         }
     }
 
-    string get_tagname(struct Node *node)
+    wstring get_tagname(struct Node *node)
     {
         return node ? node->tag : NULL;
     }
 
-    string get_attr(struct Node *node, string &key)
+    wstring get_attr(struct Node *node, wstring &key)
     {
         return node ? node->attr[key] : NULL;
     }
 
-    void get_attrs(struct Node *node, unordered_map<string, string> &attrs)
+    void get_attrs(struct Node *node, unordered_map<wstring, wstring> &attrs)
     {
         if (node)
         {
@@ -460,7 +480,7 @@ namespace html
         }
     }
 
-    void find_by_attr(struct Node *tree, const string &key, const string &value, vector<const struct Node *> &nodes)
+    void find_by_attr(struct Node *tree, const wstring &key, const wstring &value, vector<const struct Node *> &nodes)
     {
         queue<struct Node *> nodebuf;
         if (tree)
@@ -482,7 +502,7 @@ namespace html
         }
     }
 
-    void find_by_tagname(const struct Node *tree, const string &tagname, vector<const struct Node *> nodes)
+    void find_by_tagname(const struct Node *tree, const wstring &tagname, vector<const struct Node *> nodes)
     {
         queue<const struct Node *> nodebuf;
         if (tree)
@@ -513,7 +533,9 @@ void print(html::Node *tree, int backspace = 0)
 
     std::vector<int> path;
     html::get_path(tree, path);
-    std::cout << "{tag:\"" << tree->tag;
+    std::string buf;
+    html::wcstombs(buf, tree->tag);
+    std::cout << "{tag:\"" << buf;
     std::cout << "\";path:[";
     for (auto &i : path)
         std::cout << i << ',';
@@ -522,13 +544,25 @@ void print(html::Node *tree, int backspace = 0)
     std::cout << ";attr:{";
     for (auto &p : tree->attr)
     {
-        std::cout << p.first << ":\"" << p.second << "\";";
+        html::wcstombs(buf, p.first);
+        std::cout << buf << ":\"";
+        html::wcstombs(buf, p.second);
+        std::cout << buf << "\";";
     }
     std::cout << "}";
 
-    if (tree->tag == "Text")
+    if (tree->tag == L"Text")
     {
-        std::cout << ";text:\"" << tree->text << "\"";
+        html::wcstombs(buf, tree->text);
+        std::cout << ";text:\"";
+        for (auto ch : buf)
+        {
+            if ('\r' == ch)
+                std::cout << "\n\r";
+            else
+                std::cout << ch;
+        }
+        std::cout << "\"";
     }
     std::cout << "}" << std::endl;
     for (int i = 0; i < tree->children.size(); i++)
@@ -537,81 +571,44 @@ void print(html::Node *tree, int backspace = 0)
     }
 }
 
-int main()
+int main(int argc, const char **argv)
 {
-    std::string page = "<html>\
-<head>\
-  <meta content=\"IE=EmulateIE7\" http-equiv=\"X-UA-Compatible\" />\
-  <meta content=\"IE=7\" http-equiv=\"X-UA-Compatible\" />\
-  <meta content=\"text/html; charset=utf-8\" http-equiv=\"Content-Type\" />\
-﻿<title>信息学奥赛一本通（C++版）在线评测系统</title>\
-<link rel=stylesheet href='bnuoj.css'>\
-<link type=\"text/css\" rel=\"stylesheet\" href=\"sh_style.css\">\
-<script type=\"text/javascript\" src=\"js/sh_main1.js\"></script>\
-<script type=\"text/javascript\" src=\"utf8-php/ueditor.config.js\"></script>\
-<script type=\"text/javascript\" src=\"utf8-php/ueditor.all.min.js\"></script>\
-<script type=\"text/javascript\" src=\"utf8-php/lang/zh-cn/zh-cn.js\"></script>\
-<script type=\"text/javascript\" src=\"mk/showdown.min.js\"></script>\
-<script type=\"text/x-mathjax-config\">\
-  MathJax.Hub.Config({showProcessingMessages: false,tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']],processEscapes:true},menuSettings: {zoom: \"Hover\"}});\
-</script>\
-<script type=\"text/javascript\" src=\"mk/MathJax/MathJax.js?config=TeX-AMS-MML_HTMLorMML\"></script>\
-</head><body topmargin='0' onload=\"sh_highlightDocument();\">\
-<center><table class=\"webtop\" width=\"98%\">\
-<tr><th width='60%'><img src=\"5.jpg\" width=80% height=80% border=0 name=\"banner\"></a><br><font size=2 color=#FFA07A>本网站由成都石室中学、福建长乐一中信奥教练联合呈现。题库教师群:307432527,仅供教师加入</font></th>\
-<th width=\"15%\"><span style=\"color:blue; font-size: 24px; font-family: 楷体, 楷体_GB2312, SimKai;\">围观：初赛那点事！</span><br><a href=\"http://tg.ssoier.cn:7077\" target=_blank class=\"a7\">提高</a>&nbsp;<a href=\"http://pj.ssoier.cn:7077\" target=_blank class=\"a7\">普及</a></th>\
-<th width=\"15%\">\
-你现在还未登录哦！<br><a href=\"login0.php\">用户登录</a><br><a href=\"register.php\">注册新用户</a></th></tr></table>\
-<table class=\"menu\" width=\"98%\"><tr  bgcolor='#c8d4f7'>\
-<th width=\"14%\" class='menu'><a href='index.php' class='menu'>首页 </a></th>\
-<th width=\"14%\" class='menu'><a href='ranklist.php' class='menu'>排名 </a></th>\
-<th width=\"14%\" class='menu'><a href='status.php' class='menu'>提交记录 </a></th>\
-<th width=\"14%\" class='menu'><a href='problem_list.php?page=' class='menu'>题目列表 </a></th>\
-<th width=\"14%\" class='menu'><a href='contest_list.php' class='menu'>比赛 </a></th>\
-<th width=\"14%\" class='menu'><a href='tch_index.php' class='menu'>教师频道</a> </th>\
-<th width=\"14%\" class='menu'><a href='about.php' class='menu'>关于 </th>\
-</tr></table>\
-<hr>\
-<style type=\"text/css\">\
-pre {\
-  margin:10px auto;\
-  padding:10px;\
-  background-color:#f1f1f1;\
-  white-space:pre-wrap;\
-  word-wrap:break-word;\
-  letter-spacing:0;\
-  font:14px/20px 'courier new';\
-  position:relative;\
-  border-radius:5px;\
-  box-shadow:0px 0px 1px #000;\
-}\
-code {\
-  padding:3px; \
-  font-weight:bold;\
-  font-size:16px;\
-  background-color:#e7e7e7;\
-  border-radius:3px;\
-}\
-</style>\
-<center><table width=1000px><td class=\"pcontent\"><center><h3>1000：入门测试题目</h3><br><font size=2>时间限制: 1000 ms &nbsp;&nbsp;&nbsp; &nbsp;&nbsp;&nbsp; 内存限制: 32768 KB<br>提交数: 133245 &nbsp;&nbsp;&nbsp; 通过数: 79935 </font><br></center><font size=3><h3>【题目描述】</h3>\
-<div class=xxbox><p>求两个整数的和。</p>\
-</div>\
-<h3>【输入】</h3>\
-<div class=xxbox><p>一行，两个用空格隔开的整数。</p>\
-</div><h3>【输出】</h3>\
-<div class=xxbox><p>两个整数的和。</p>\
-</div><h3>【输入样例】</h3>\
-<font size=3><pre>2 3</pre>\
-<font size=3><h3>【输出样例】</h3>\
-<font size=3><pre>5</pre><font size=3>\
-<p align=center> <a href=submit.php?pid=1000 class=\"bottom_link\"> 提交 </a> <a href=problem_stat.php?pid=1000 class=\"bottom_link\"> 统计信息 </a> </p></td></tr></table></center><hr><center><p><font size=2>本题库与《信息学奥赛一本通（C++版）》（科学技术文献出版社）配套，版权及相关事宜请与本书作者联系，本网站不作解答。<br>本网站属公益、非盈利性质，不涉及与书相关的商业活动，后期可能适当收取费用以支持网站的运行维护。<br>目前因个人编写水平有限，网站维护、网站安全方面及部分功能的开发尚不成熟，如遇疑问，请通过版主信箱联系。<br>感谢成都石室中学Wuvin、Qizy、Xehoth三位同学对本网站的支持，特别鸣谢北京师范大学ACM前校队易超、唐巧、洪涛同学。<br>版主信箱：ybt_mail@126.com<br></font></p></center></body></html>";
-    std::string lexical = html::parse_text(page);
-    std::cout << lexical << std::endl;
+    std::string filename;
+    std::cout << "BEGIN" << filename << std::endl;
+    while (!std::cin.eof())
+    {
+        getline(std::cin, filename);
+        if (filename.empty())
+            continue;
+        else if (filename == "EOF")
+            break;
+        std::cout << "RUN" << filename << std::endl;
+        std::ifstream ifs(filename);
+        std::string page;
+        while (!ifs.eof())
+        {
+            std::string textline;
+            getline(ifs, textline);
+            if (!textline.empty())
+            {
+                page += textline;
+            }
+        }
 
-    html::Node *tree = html::extract(page, lexical);
-    html::fix_structure(tree);
-    html::parse_attr(tree, lexical);
-    print(tree);
+        const char *oldlocale = std::setlocale(LC_ALL, NULL);
+        std::setlocale(LC_ALL, "zh_CN.UTF-8");
+        std::wstring wpage;
+        html::mbstowcs(wpage, page);
+        std::string chartags = html::parse_text(wpage);
+        html::Node *tree = html::extract(wpage, chartags);
+        html::fix_structure(tree);
+        html::parse_attr(tree, chartags);
+
+        print(tree);
+        std::setlocale(LC_ALL, oldlocale);
+    };
+
+    std::cout << "END" << std::endl;
 }
 
 #endif
